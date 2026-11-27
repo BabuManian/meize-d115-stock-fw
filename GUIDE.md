@@ -4,7 +4,16 @@ A working method for running a LineageOS GSI on the **MEIZE D115** tablet (Media
 
 > ⚠️ **Read the "Why most guides fail" section first.** The usual GSI step (`fastboot --disable-verity --disable-verification flash vbmeta vbmeta.img`) **will not work on this tablet**. It boots into "Can't load Android system" every time.
 
-Tested: LineageOS 21 (Andy Yan TD build `arm64_bvN`, 2026-11-09) boots fully. Wi-Fi, audio, touch, rotation and encryption all work.
+## Tested GSIs
+
+| GSI | Android | Result |
+|---|---|---|
+| **MisterZtr LineageOS 23.2 VANILLA-EXT4** (2026-05-24) | 16 | ✅ **Recommended.** Boots, encrypted, smooth |
+| Andy Yan LineageOS 21 TD `arm64_bvN` (2026-11-09) | 14 | ✅ Works (Wi-Fi, audio, touch, rotation, encryption) |
+| Andy Yan LineageOS 24 "pure" `gsi_arm64` (2026-11-07) | 17 | ❌ Hard-resets during early boot (APEX mount). Likely kernel 4.19 |
+| Google Android 17 GSI through DSU (locked bootloader) | 17 | ❌ Won't boot |
+
+Ready-made `vbmeta_system` images for the working GSIs are on the [Releases](../../releases) page.
 
 ---
 
