@@ -128,6 +128,14 @@ Only relock (`fastboot flashing lock`) on a 100% stock image set.
 - **Avoid forced power-offs** (holding Power). On one test, a forced shutdown after the USB hang corrupted `/metadata` (the `md_udc` partition). Android reformatted it and the **file-encryption key was lost**, so the data could not be decrypted ("Can't load Android system", factory reset required). Clean restarts from the power menu are fine.
 - Optional safety net: back up `md_udc` after setup (`python mtk.py r md_udc md_udc.img`). Writing it back restores access to your data, but only until the next factory reset.
 
+## Changing the boot logo (the white "Meize" screen)
+
+The first screen (white background with the Meize logo and "Powered by Android") lives in the **`logo`** partition, **not** in the bootloader. The partition is standard MediaTek format: a 512-byte header (`0x58881688`, name `logo`), then `count`, `total size`, an offset table, and **zlib-compressed raw BGRA** images. Two signing blocks (`cert1`, `cert2`) are appended, but an unlocked bootloader still accepts a modified logo.
+
+- The Meize screen is **image index 42** (duplicate at **80**), stored **landscape 1280×800**. Indices 0 and 38 are unused MediaTek placeholders. The rest are charging animations.
+- To replace it: decode, swap indices 42 and 80 with your own 1280×800 BGRA image, recompress, fix up the offsets and header size, then `fastboot flash logo logo_custom.bin` (bootloader fastboot, no data wipe).
+- **Back up the original first** (`python mtk.py r logo logo_stock.bin`). To revert: `fastboot flash logo logo_stock.bin`.
+
 ## Debugging boot failures
 
 MediaTek keeps kernel and TEE logs in the `expdb` partition, and they survive reboots. Read it with `python mtk.py r expdb expdb.img`, then
