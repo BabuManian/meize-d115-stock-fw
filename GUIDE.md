@@ -1,0 +1,124 @@
+# MEIZE / KAIDA D115: Installing LineageOS (GSI)
+
+A working method for running a LineageOS GSI on the **MEIZE D115** tablet (MediaTek MT8788, TrustKernel TEE), with **encryption working**.
+
+> ⚠️ **Read the "Why most guides fail" section first.** The usual GSI step (`fastboot --disable-verity --disable-verification flash vbmeta vbmeta.img`) **will not work on this tablet**. It boots into "Can't load Android system" every time.
+
+Tested: LineageOS 21 (Andy Yan TD build `arm64_bvN`, 2026-11-09) boots fully. Wi-Fi, audio, touch, rotation and encryption all work.
+
+---
+
+## Device facts
+
+| | |
+|---|---|
+| SoC | MT8788 (`mt6771` platform), 4×A73 + 4×A53, Mali-G72 MP3 |
+| Bootloader | MediaTek `lk`, product `tb8788p1_64_bsp_k419` |
+| Stock | Android 14 (`UP1A.231005.007`), vendor Android 12 (VNDK 31) |
+| Kernel | 4.19 → **use ext4 GSIs only** (EROFS needs 5.4+) |
+| Partitions | A/B, dynamic `super`, virtual A/B, `init_boot` |
+| TEE | TrustKernel (TKCore), `keymaster@4.1-service.trustkernel` |
+| `/metadata` | lives on the **`md_udc`** partition, not `metadata` |
+| BROM | Not protected (no SLA/DAA). mtkclient works |
+
+---
+
+## Why most guides fail (the important part)
+
+The TrustKernel keymaster gets a "root of trust" from the bootloader, based on **`vbmeta_a`**. If `vbmeta_a` is modified in **any** way (disabled flags, re-signed, even signed with the AOSP test key), the TEE logs:
+
+```
+ERR KEYMASTER:root_of_trust_verify: Invalid Root of Trust. Device might be compromised
+```
+
+Then keystore can't generate keys, `vold` fails `init_user0`, and the device drops to recovery with **"Can't load Android system"**. Turning encryption off in the vendor fstab gets you further, but `system_server` then crash-loops in `LockSettingsService` because it still needs keystore.
+
+**Fix:** leave the stock `vbmeta_a` untouched. Re-sign only the **chained** `vbmeta_system_a` so it matches the GSI. On an unlocked device the bootloader tolerates the chained-key mismatch, and the TEE still trusts the boot.
+
+---
+
+## Requirements
+
+- Linux PC with [platform-tools](https://developer.android.com/tools/releases/platform-tools) (fastboot 35+)
+- [mtkclient](https://github.com/bkerler/mtkclient) for backups and unbricking
+- `avbtool.py` and the AOSP test key `testkey_rsa2048.pem` (from `platform/external/avb`)
+- An **ext4, arm64, A/B** GSI that ships with an AVB hashtree footer (Andy Yan's builds do)
+
+## Step 0: Back up (do not skip)
+
+Power off, hold **Vol+ and Vol−**, plug in USB (BROM mode):
+
+```bash
+python mtk.py r vbmeta_a,vbmeta_system_a,vbmeta_vendor_a,super,nvram,nvdata,persist,proinfo,seccfg \
+  vbmeta_a.img,vbmeta_system_a.img,vbmeta_vendor_a.img,super.img,nvram.img,nvdata.img,persist.img,proinfo.img,seccfg.img
+```
+
+Keep `nvram`, `nvdata`, `persist`, `proinfo` and `seccfg` **private**. They contain your MAC addresses, serial number and keys.
+
+## Step 1: Unlock the bootloader (wipes data)
+
+Turn on **Developer options → OEM unlocking**, then:
+
+```bash
+adb reboot bootloader
+fastboot flashing unlock      # confirm with Vol+ on the tablet
+```
+
+## Step 2: Build a vbmeta_system for your GSI
+
+```bash
+python3 avbtool.py info_image --image lineage.img     # must show a hashtree "Footer"
+python3 avbtool.py make_vbmeta_image \
+  --algorithm SHA256_RSA2048 --key testkey_rsa2048.pem --padding_size 4096 \
+  --include_descriptors_from_image lineage.img \
+  --output vbmeta_system_gsi.img
+```
+
+(If your GSI has no footer, add one: `avbtool.py add_hashtree_footer --image lineage.img --partition_name system --hash_algorithm sha256 --do_not_generate_fec`.)
+
+## Step 3: Flash
+
+```bash
+# bootloader fastboot: flash the chained vbmeta only. Do NOT touch vbmeta_a
+fastboot flash vbmeta_system_a vbmeta_system_gsi.img
+
+# fastbootd: flash the GSI
+fastboot reboot fastboot
+fastboot delete-logical-partition product_a
+fastboot flash system lineage.img
+
+# bootloader fastboot: wipe (fastbootd can't see userdata on this device)
+fastboot reboot bootloader
+fastboot erase md_udc
+fastboot -w
+fastboot reboot
+```
+
+The first boot takes a few minutes. The bootloader shows an "orange state / unlocked" warning, which is normal.
+
+## Updating or switching GSIs
+
+Every new `system` image needs its own matching `vbmeta_system` (Step 2). If you flash a new `system` without one, it will fail dm-verity.
+
+## Back to stock
+
+Flash the stock images from the [Releases](../../releases) page:
+
+```bash
+fastboot flash vbmeta_a vbmeta_a.img
+fastboot flash vbmeta_system_a vbmeta_system_a.img
+fastboot flash super super.img          # xz -d first
+fastboot erase md_udc && fastboot -w && fastboot reboot
+```
+
+Only relock (`fastboot flashing lock`) on a 100% stock image set.
+
+## Debugging boot failures
+
+MediaTek keeps kernel and TEE logs in the `expdb` partition, and they survive reboots. Read it with `python mtk.py r expdb expdb.img`, then
+`strings -n 8 expdb.img | grep -E "Root of Trust|init_user0|FATAL|vold"`.
+
+## Useful navigation
+
+- Recovery menu: Vol− moves, Power selects. "Enter fastboot" = fastbootd, "Reboot to bootloader" = lk fastboot.
+- BROM: power off fully (hold Power 20 s), then hold Vol+ and Vol− while plugging in USB.

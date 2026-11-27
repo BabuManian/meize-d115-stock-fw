@@ -1,5 +1,7 @@
 # MEIZE / KAIDA D115 – Stock Firmware Backup
 
+> 📱 **Want LineageOS? See [GUIDE.md](GUIDE.md).** The usual GSI vbmeta trick does NOT work on this tablet; the guide explains what does.
+
 Stock firmware dumped from a **MEIZE D115** tablet (manufacturer: KAIDA) with [mtkclient](https://github.com/bkerler/mtkclient).
 
 | | |
@@ -17,6 +19,8 @@ Stock firmware dumped from a **MEIZE D115** tablet (manufacturer: KAIDA) with [m
 |---|---|
 | `super.img.xz` | Full `super` partition (system/vendor/product), slot `_a`, raw 8 GB, xz-compressed |
 | `vbmeta_a.img` | Stock `vbmeta_a` |
+| `vbmeta_system_a.img` | Stock `vbmeta_system_a` |
+| `vbmeta_vendor_a.img` | Stock `vbmeta_vendor_a` |
 | `SHA256SUMS` | Checksums |
 
 Device-unique partitions (nvram, nvdata, persist, proinfo, seccfg) are **not** included. Back up your own before flashing anything.
