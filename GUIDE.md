@@ -122,6 +122,12 @@ fastboot erase md_udc && fastboot -w && fastboot reboot
 
 Only relock (`fastboot flashing lock`) on a 100% stock image set.
 
+## ⚠️ Known pitfalls after install
+
+- **Don't use "Rooted debugging" / `adb root`.** On this tablet, restarting adbd as root crashes the USB gadget and can hang the device.
+- **Avoid forced power-offs** (holding Power). On one test, a forced shutdown after the USB hang corrupted `/metadata` (the `md_udc` partition). Android reformatted it and the **file-encryption key was lost**, so the data could not be decrypted ("Can't load Android system", factory reset required). Clean restarts from the power menu are fine.
+- Optional safety net: back up `md_udc` after setup (`python mtk.py r md_udc md_udc.img`). Writing it back restores access to your data, but only until the next factory reset.
+
 ## Debugging boot failures
 
 MediaTek keeps kernel and TEE logs in the `expdb` partition, and they survive reboots. Read it with `python mtk.py r expdb expdb.img`, then
